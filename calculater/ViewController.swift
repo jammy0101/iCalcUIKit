@@ -7,16 +7,21 @@
 
 import UIKit
 
+
 class ViewController: UIViewController {
 
     let displayLabel = UILabel()
-    var currentNumber: Double = 0
     var previousNumber: Double = 0
     var currentOperation: String?
     var isTypingNumber = false
+    var history: [HistoryItem] = []
+
+    // if the number have no decimal part show it as a integer
+    //if it has decimals keep it as a decimal
     
+    // MARK: - Format Function
     func format(_ value: Double) -> String {
-        if value.truncatingRemainder(dividingBy: 1) == 0 {
+        if value == floor(value) {
             return String(Int(value))
         } else {
             return String(value)
@@ -27,8 +32,13 @@ class ViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .black
 
+        //this is the history button at the top of the text
+        let historyButton = UIBarButtonItem(title: "History", style: .plain, target: self, action: #selector(openHistory))
+        navigationItem.rightBarButtonItem = historyButton
+        
         setupDisplay()
         setupButtons()
+        
     }
 
     // MARK: - Display
@@ -60,12 +70,14 @@ class ViewController: UIViewController {
             ["+/-", "0", ".", "="]
         ]
 
+        // showing data in cloumns
         let mainStack = UIStackView()
         mainStack.axis = .vertical
         mainStack.spacing = 12
         mainStack.distribution = .fillEqually
         mainStack.translatesAutoresizingMaskIntoConstraints = false
 
+        // showing data in horizental
         for row in rows {
             let rowStack = UIStackView()
             rowStack.axis = .horizontal
@@ -97,13 +109,12 @@ class ViewController: UIViewController {
         button.setTitle(title, for: .normal)
         button.titleLabel?.font = UIFont.systemFont(ofSize: 28, weight: .medium)
         button.setTitleColor(.white, for: .normal)
-        button.layer.cornerRadius = 35
+        button.layer.cornerRadius = 30
         button.clipsToBounds = true
 
-        // Color logic
         if ["÷", "×", "−", "+", "="].contains(title) {
             button.backgroundColor = .systemOrange
-        } else if ["AC", "%", "⌫", "+/-"].contains(title) {
+        } else if ["AC", "%", "⌫"].contains(title) {
             button.backgroundColor = .darkGray
         } else {
             button.backgroundColor = UIColor(white: 0.2, alpha: 1)
@@ -114,7 +125,29 @@ class ViewController: UIViewController {
         return button
     }
 
-    // MARK: - Action
+    // MARK: - Calculate Helper
+    func calculate(_ current: Double) {
+        guard let op = currentOperation else {
+            previousNumber = current
+            return
+        }
+
+        switch op {
+        case "+": previousNumber += current
+        case "−": previousNumber -= current
+        case "×": previousNumber *= current
+        case "÷":
+            if current == 0 {
+                displayLabel.text = "Error"
+                currentOperation = nil
+                return
+            }
+            previousNumber /= current
+        default: break
+        }
+    }
+
+    // MARK: - Button Action
     @objc func buttonTapped(_ sender: UIButton) {
         guard let title = sender.currentTitle else { return }
 
@@ -129,41 +162,46 @@ class ViewController: UIViewController {
             }
 
         case ".":
-            if !(displayLabel.text?.contains(".") ?? false) {
-                displayLabel.text! += "."
+            if !isTypingNumber {
+                displayLabel.text = "0."
                 isTypingNumber = true
+            } else if !(displayLabel.text?.contains(".") ?? false) {
+                displayLabel.text! += "."
             }
 
         case "+", "−", "×", "÷":
-            previousNumber = Double(displayLabel.text!) ?? 0
+            let current = Double(displayLabel.text!) ?? 0
+            calculate(current)
+            displayLabel.text = format(previousNumber)
             currentOperation = title
             isTypingNumber = false
 
         case "=":
             let current = Double(displayLabel.text!) ?? 0
-            var result: Double = 0
-
-            switch currentOperation {
-            case "+": result = previousNumber + current
-            case "−": result = previousNumber - current
-            case "×": result = previousNumber * current
-            case "÷": result = current == 0 ? 0 : previousNumber / current
-            default: break
-            }
-
-            displayLabel.text = format(result)
+            
+            let expression = "\(format(previousNumber)) \(currentOperation ?? "") \(format(current))"
+            
+            calculate(current)
+            
+            let resultText = format(previousNumber)
+            displayLabel.text = resultText
+            
+            // Save history
+            history.append(HistoryItem(expression: expression, result: resultText))
+            
+            currentOperation = nil
             isTypingNumber = false
 
         case "AC":
             displayLabel.text = "0"
-            currentNumber = 0
             previousNumber = 0
             currentOperation = nil
             isTypingNumber = false
 
         case "⌫":
-            if isTypingNumber && displayLabel.text!.count > 1 {
-                displayLabel.text!.removeLast()
+            if var text = displayLabel.text, text.count > 1 {
+                text.removeLast()
+                displayLabel.text = text
             } else {
                 displayLabel.text = "0"
                 isTypingNumber = false
@@ -182,5 +220,11 @@ class ViewController: UIViewController {
         default:
             break
         }
+    }
+    //passing data from here to history screen
+    @objc func openHistory() {
+        let vc = HistoryViewController()
+        vc.history = history
+        navigationController?.pushViewController(vc, animated: true)
     }
 }
